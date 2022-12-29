@@ -27,7 +27,7 @@ class PSOD:
     def __init__(
             self,
             n_jobs=-1,
-            cat_columns: Union[List[str, int, float], None] = None,
+            cat_columns: Union[List[str], List[int], List[float], None] = None,
             min_cols_chosen: float = 0.5,
             max_cols_chosen: float = 1.0,
             stdevs_to_outlier: float = 1.96,
@@ -39,8 +39,8 @@ class PSOD:
         self.cat_encoders: Dict[Union[str, int, float], TargetEncoder] = {}
         self.regressors: Dict[Union[str, int, float], LinearRegression] = {}
         self.n_jobs = n_jobs
-        self.scores = None
-        self.outlier_classes = None
+        self.scores: Union[pd.Series, None] = None
+        self.outlier_classes = Union[pd.Series, None]
         self.min_cols_chosen = min_cols_chosen
         self.max_cols_chosen = max_cols_chosen
         self.chosen_columns: List[list] = []
