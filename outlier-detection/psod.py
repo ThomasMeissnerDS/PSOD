@@ -41,8 +41,8 @@ class PSOD:
         self.n_jobs = n_jobs
         self.scores: Union[pd.Series, None] = None
         self.outlier_classes = Union[pd.Series, None]
-        self.min_cols_chosen = min_cols_chosen
-        self.max_cols_chosen = max_cols_chosen
+        self.min_cols_chosen: Union[int, float] = min_cols_chosen
+        self.max_cols_chosen: Union[int, float] = max_cols_chosen
         self.chosen_columns: List[list] = []
         self.stdevs_to_outlier = stdevs_to_outlier
         self.log_transform = log_transform
@@ -81,6 +81,8 @@ class PSOD:
         self.min_cols_chosen: int = max(int(len_cols * self.min_cols_chosen), 1)
         self.max_cols_chosen: int = min(int(len_cols * self.max_cols_chosen), len_cols)
 
+    22:53
+
     def chose_random_columns(self, df) -> list:
         """
         Select random columns.
@@ -88,9 +90,12 @@ class PSOD:
         Randomize number of columns to chose from as well as the columns chosen.
         :return: list object with chosen column names
         """
-        nb_cols: int = self.random_generator.choice(
-            np.arange(self.min_cols_chosen, self.max_cols_chosen) + 1, 1, replace=False
-        )
+        if self.min_cols_chosen == 1 & self.max_cols_chosen == 1:
+            nb_cols: int = 1
+        else:
+            nb_cols: int = self.random_generator.choice(
+                np.arange(self.min_cols_chosen, self.max_cols_chosen) + 1, 1, replace=False
+            )
         return self.random_generator.choice(df.columns, nb_cols, replace=False).tolist()
 
     def col_intersection(self, lst1, lst2) -> list:
