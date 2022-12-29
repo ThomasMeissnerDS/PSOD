@@ -9,10 +9,25 @@ from tqdm import tqdm
 
 
 class PSOD:
+    """
+    Get outlier predictions using a pseudo-supervised approach.
+
+    :param n_jobs: Used to determine number of cores used for LinearRegression. Check sklearn documentation for details.
+    :param cat_columns: None if no categorical features are present. Otherwise list specifying column names of
+                          categorical features.
+    :param min_cols_chosen: Float specifying the minimum percentage of columns to be used for each regressor.
+    :param max_cols_chosen: Float specifying the maximum percentage of columns to be used for each regressor.
+    :param stdevs_to_outlier: Float specifying after how many standard deviations the mean prediction error will be
+                              flagged as an outlier.
+    :param log_transform: Boolean to set if the numerical data will be log-transformed.
+    :param random_seed: Int specifying the start random_seed. Each additional iteration will use a different seed.
+    :param flag_outlier_on: String indicating if outliers shall we errors that are on the top end, bottom end or
+                            both ends of the mean error distribution. Must be any of ["low end", "both ends", "high end"]
+    """
     def __init__(
             self,
             n_jobs=-1,
-            cat_columns=None,
+            cat_columns: Union[List[str, int, float], None] = None,
             min_cols_chosen: float = 0.5,
             max_cols_chosen: float = 1.0,
             stdevs_to_outlier: float = 1.96,
@@ -41,8 +56,25 @@ class PSOD:
         if self.min_cols_chosen <= 0:
             raise ValueError("Param min_cols_chosen must be higher than 0.")
 
+        if self.min_cols_chosen > self.max_cols_chosen:
+            raise ValueError("Param min_cols_chosen cannot be higher than param max_cols_chosen.")
+
         if self.flag_outlier_on not in ["low end", "both ends", "high end"]:
             raise ValueError('Param flag_outlier_on must be any of ["low end", "both ends", "high end"].')
+
+    def __str__(self):
+        message = f"""
+        Most important params specified are:
+        - n_jobs: {self.n_jobs}
+        - cat_columns: {self.cat_columns}
+        - min_cols_chosen: {self.min_cols_chosen}
+        - max_cols_chosen: {self.max_cols_chosen}
+        - stdevs_to_outlier: {self.stdevs_to_outlier}
+        - log_transform: {self.log_transform}
+        - random_seed: {self.random_seed}
+        - flag_outlier_on: {self.flag_outlier_on}
+        """
+        return message
 
     def get_range_cols(self, df):
         len_cols = len(df.columns) - 1  # taking out the "target" column
