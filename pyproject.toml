@@ -1,3 +1,4 @@
+[tool.poetry]
 name = "psod"
 version = "0.0.1"
 description = "Outlier detection using supervised methods in a supervised context"
