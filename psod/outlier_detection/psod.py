@@ -81,8 +81,6 @@ class PSOD:
         self.min_cols_chosen: int = max(int(len_cols * self.min_cols_chosen), 1)
         self.max_cols_chosen: int = min(int(len_cols * self.max_cols_chosen), len_cols)
 
-    22:53
-
     def chose_random_columns(self, df) -> list:
         """
         Select random columns.

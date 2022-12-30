@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "psod"
-version = "0.0.2"
+version = "0.0.3"
 description = "Outlier detection using supervised methods in a supervised context"
 authors = ["Thomas Meißner <meissnercorporation@gmx.de>"]
 license = "GPL-3.0-only"

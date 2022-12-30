@@ -14,7 +14,7 @@ pip install psod
 
 2.) Import the package:
 ```sh
-from psod.outlier_detection import PSOD
+from psod.outlier_detection.psod import PSOD
 ```
 
 3.) Instantiate the class:
