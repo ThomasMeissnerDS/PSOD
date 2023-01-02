@@ -19,6 +19,7 @@ class PSOD:
     :param max_cols_chosen: Float specifying the maximum percentage of columns to be used for each regressor.
     :param stdevs_to_outlier: Float specifying after how many standard deviations the mean prediction error will be
                               flagged as an outlier.
+    :param sample_frac: Float specifying how much percent of rows each bagging sample shall use.
     :param log_transform: Boolean to set if the numerical data will be log-transformed.
     :param random_seed: Int specifying the start random_seed. Each additional iteration will use a different seed.
     :param flag_outlier_on: String indicating if outliers shall we errors that are on the top end, bottom end or
@@ -31,6 +32,7 @@ class PSOD:
             min_cols_chosen: float = 0.5,
             max_cols_chosen: float = 1.0,
             stdevs_to_outlier: float = 1.96,
+            sample_frac: float = 1.0,
             log_transform: bool = True,
             random_seed: int = 1,
             flag_outlier_on: Literal["low end", "both ends", "high end"] = "both ends"
@@ -45,6 +47,7 @@ class PSOD:
         self.max_cols_chosen: Union[int, float] = max_cols_chosen
         self.chosen_columns: Dict[Union[str, int, float]] = {}
         self.stdevs_to_outlier = stdevs_to_outlier
+        self.sample_frac = sample_frac
         self.log_transform = log_transform
         self.flag_outlier_on = flag_outlier_on
         self.random_seed = random_seed
@@ -155,7 +158,7 @@ class PSOD:
                     self.cat_columns, self.chosen_columns[col]
                 )
 
-            idx = df_scores.sample(frac=1.0, random_state=enum, replace=True).index
+            idx = df_scores.sample(frac=self.sample_frac, random_state=enum, replace=True).index
 
             if isinstance(self.cat_columns, list):
                 enc = TargetEncoder(cols=chosen_cat_cols)
@@ -169,7 +172,8 @@ class PSOD:
                 temp_df[col].iloc[idx],
             )
             df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[col]])
-            df_scores[col] = abs(temp_df[col] - df_scores[col])
+            df_scores[col] = abs(temp_df[col].values - df_scores[col].values)
+
             self.regressors[col] = reg
             if isinstance(self.cat_columns, list):
                 self.cat_encoders[col] = enc
