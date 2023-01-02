@@ -73,6 +73,7 @@ class PSOD:
         - min_cols_chosen: {self.min_cols_chosen}
         - max_cols_chosen: {self.max_cols_chosen}
         - stdevs_to_outlier: {self.stdevs_to_outlier}
+        - sample_frac: {self.sample_frac}
         - log_transform: {self.log_transform}
         - random_seed: {self.random_seed}
         - flag_outlier_on: {self.flag_outlier_on}
@@ -163,13 +164,13 @@ class PSOD:
             if isinstance(self.cat_columns, list):
                 enc = TargetEncoder(cols=chosen_cat_cols)
                 temp_df.loc[:, chosen_cat_cols] = enc.fit_transform(
-                    df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
-                    df.loc[:, col].iloc[idx].reset_index(drop=True),
+                    df.loc[:, chosen_cat_cols].reset_index(drop=True),
+                    df.loc[:, col].reset_index(drop=True),
                 )
 
             reg = LinearRegression(n_jobs=self.n_jobs).fit(
-                temp_df.loc[:, self.chosen_columns[col]].iloc[idx],
-                temp_df[col].iloc[idx],
+                temp_df.loc[:, self.chosen_columns[col]].iloc[idx].reset_index(drop=True),
+                temp_df[col].iloc[idx].reset_index(drop=True),
             )
             df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[col]])
             df_scores[col] = abs(temp_df[col].values - df_scores[col].values)
