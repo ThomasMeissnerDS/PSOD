@@ -43,7 +43,7 @@ class PSOD:
         self.outlier_classes = Union[pd.Series, None]
         self.min_cols_chosen: Union[int, float] = min_cols_chosen
         self.max_cols_chosen: Union[int, float] = max_cols_chosen
-        self.chosen_columns: List[list] = []
+        self.chosen_columns: Dict[Union[str, int, float]] = {}
         self.stdevs_to_outlier = stdevs_to_outlier
         self.log_transform = log_transform
         self.flag_outlier_on = flag_outlier_on
@@ -97,8 +97,7 @@ class PSOD:
         return self.random_generator.choice(df.columns, nb_cols, replace=False).tolist()
 
     def col_intersection(self, lst1, lst2) -> list:
-        chosen_cat_cols = [value for value in lst1 if value in lst2]
-        return chosen_cat_cols
+        return np.intersect1d(lst1, lst2).tolist()
 
     def make_outlier_classes(self, df_scores: pd.DataFrame):
         mean_score = df_scores["anomaly"].mean()
@@ -148,12 +147,12 @@ class PSOD:
             )
 
         for enum, col in tqdm(enumerate(loop_cols), total=len(loop_cols)):
-            self.chosen_columns.append(self.chose_random_columns(df.drop(col, axis=1)))
+            self.chosen_columns[col] = self.chose_random_columns(df.drop(col, axis=1))
             temp_df = df.copy()
             # encode categorical columns that are in chosen columns
             if isinstance(self.cat_columns, list):
                 chosen_cat_cols = self.col_intersection(
-                    self.cat_columns, self.chosen_columns[enum]
+                    self.cat_columns, self.chosen_columns[col]
                 )
 
             idx = df_scores.sample(frac=1.0, random_state=enum, replace=True).index
@@ -166,10 +165,10 @@ class PSOD:
                 )
 
             reg = LinearRegression(n_jobs=self.n_jobs).fit(
-                temp_df.loc[:, self.chosen_columns[enum]].iloc[idx],
+                temp_df.loc[:, self.chosen_columns[col]].iloc[idx],
                 temp_df[col].iloc[idx],
             )
-            df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[enum]])
+            df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[col]])
             df_scores[col] = abs(temp_df[col] - df_scores[col])
             self.regressors[col] = reg
             if isinstance(self.cat_columns, list):
@@ -200,7 +199,7 @@ class PSOD:
         for enum, col in tqdm(enumerate(loop_cols)):
             temp_df = df
             chosen_cat_cols = self.col_intersection(
-                self.cat_columns, self.chosen_columns[enum]
+                self.cat_columns, self.chosen_columns[col]
             )
             if isinstance(self.cat_columns, list):
                 enc = self.cat_encoders[col]
@@ -208,7 +207,7 @@ class PSOD:
 
             reg = self.regressors[col]
 
-            df_scores[col] = reg.predict(df[self.chosen_columns[enum]])
+            df_scores[col] = reg.predict(df[self.chosen_columns[col]])
             df_scores[col] = abs(df[col] - df_scores[col])
             self.regressors[col] = reg
 

@@ -24,13 +24,13 @@ iso_class = PSOD()
 The class has multiple arguments that can be passed. If older labels exist these could be used
 for hyperparameter tuning.
 
-4.) Recommended: Normalize the data
+4.) Recommended: Normalize the data. PSOD offers preprocessing functions. It can downcast all
+columns to reduce memory footprint massively (up to 75%). It can also scale the data. For
+convenience both steps can be called together using:
 ```sh
-from sklearn.preprocessing import MinMaxScaler
-scaler = MinMaxScaler()
-scaler.fit(treatment_data[cols])
-scaled = scaler.transform(treatment_data[cols])
-scaled = pd.DataFrame(scaled, columns=cols)
+from psod.preprocessing.full_preprocessing import auto_preprocess
+
+scaled = auto_preprocess(treatment_data)
 ```
 
 5.) Fit and predict:
