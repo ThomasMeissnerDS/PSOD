@@ -32,6 +32,7 @@ from psod.preprocessing.full_preprocessing import auto_preprocess
 
 scaled = auto_preprocess(treatment_data)
 ```
+However they can also be called individually on demand.
 
 5.) Fit and predict:
 ```sh
@@ -49,9 +50,31 @@ iso_class.scores  # getting the outlier scores
 iso_class.outlier_classes  # get the classes
 ```
 
+Many parameters can be optimized. Detailed descriptions on parameters can be found using:
+```sh
+help(iso_class)
+```
+By printing class instance current settings can be observed:
+```sh
+print(iso_class)
+```
+
 The repo contains example notebooks. Please note that example notebooks do not always contain the newest version. 
 The file psod.py is always the most updated one.
 [See the full article](https://medium.com/@thomasmeissnerds)
+
+## Release History
+
+* 1.0.0
+    * Some bug fixes
+    * Added yeo-johnson to numerical transformation options and changed the parameter name and type
+    * Added preprocessing functionality (scaling and memory footprint reduction)
+    * Added warnings to flag risky input params
+    * Changed default of numerical preprocessing to None (previously logarithmic)
+    * Suppressed Pandas Future and CopySettings warnings
+    * Enhanced Readme
+* 0.0.4
+    * First version with bare capabilities
 
 
 ## Meta
