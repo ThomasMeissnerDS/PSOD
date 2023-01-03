@@ -209,7 +209,11 @@ class PSOD:
             self.regressors[col] = reg
             if isinstance(self.cat_columns, list):
                 self.cat_encoders[col] = enc
+                del enc
+
             del temp_df
+            del idx
+            del reg
             _ = gc.collect()
 
         df_scores = self.drop_cat_columns(df_scores)
