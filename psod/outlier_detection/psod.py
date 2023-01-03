@@ -163,7 +163,12 @@ class PSOD:
 
             if isinstance(self.cat_columns, list):
                 enc = TargetEncoder(cols=chosen_cat_cols)
-                temp_df.loc[:, chosen_cat_cols] = enc.fit_transform(
+                enc.fit(
+                    df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
+                    df.loc[:, col].iloc[idx].reset_index(drop=True),
+                )
+
+                temp_df.loc[:, chosen_cat_cols] = enc.transform(
                     df.loc[:, chosen_cat_cols].reset_index(drop=True),
                     df.loc[:, col].reset_index(drop=True),
                 )
