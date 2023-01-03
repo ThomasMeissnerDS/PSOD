@@ -1,3 +1,6 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import gc
 from typing import Dict, List, Union, Literal
 

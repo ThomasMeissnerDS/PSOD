@@ -1,5 +1,9 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 import pandas as pd
 import numpy as np
+
+pd.options.mode.chained_assignment = None
 
 
 def reduce_mem_usage(df):
@@ -20,37 +24,37 @@ def reduce_mem_usage(df):
             c_max = df[col].max()
             if str(col_type)[:3] == "int":
                 if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
-                    df.loc[:, col] = df.loc[:, col].astype(np.int8)
+                    df[col] = df[col].astype(np.int8)
                 elif (
                         c_min > np.iinfo(np.int16).min
                         and c_max < np.iinfo(np.int16).max
                 ):
-                    df.loc[:, col] = df.loc[:, col].astype(np.int16)
+                    df[col] = df[col].astype(np.int16)
                 elif (
                         c_min > np.iinfo(np.int32).min
                         and c_max < np.iinfo(np.int32).max
                 ):
-                    df.loc[:, col] = df.loc[:, col].astype(np.int32)
+                    df[col] = df[col].astype(np.int32)
                 elif (
                         c_min > np.iinfo(np.int64).min
                         and c_max < np.iinfo(np.int64).max
                 ):
-                    df.loc[:, col] = df.loc[:, col].astype(np.int64)
+                    df[col] = df[col].astype(np.int64)
             else:
                 if (
                         c_min > np.finfo(np.float16).min
                         and c_max < np.finfo(np.float16).max
                 ):
-                    df.loc[:, col] = df.loc[:, col].astype(np.float16)
+                    df[col] = df[col].astype(np.float16)
                 elif (
                         c_min > np.finfo(np.float32).min
                         and c_max < np.finfo(np.float32).max
                 ):
-                    df.loc[:, col] = df.loc[:, col].astype(np.float32)
+                    df[col] = df[col].astype(np.float32)
                 else:
-                    df.loc[:, col] = df.loc[:, col].astype(np.float64)
+                    df[col] = df[col].astype(np.float64)
         else:
-            df.loc[:, col] = df.loc[:, col].astype("category")
+            df[col] = df[col].astype("category")
 
     end_mem = df.memory_usage().sum() / 1024 ** 2
     print("Memory usage after optimization is: {:.2f} MB".format(end_mem))

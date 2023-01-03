@@ -1,3 +1,5 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 from psod.preprocessing.scale import minmax_scaling
 from psod.preprocessing.reduce_memory_footprint import reduce_mem_usage
 import pandas as pd
