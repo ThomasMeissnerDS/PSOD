@@ -1,11 +1,16 @@
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import gc
-from typing import Dict, List, Union, Literal
+from typing import Dict, List, Union, Literal, Callable
 
 import numpy as np
 import pandas as pd
 from category_encoders import TargetEncoder
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PowerTransformer
 from tqdm import tqdm
+import warnings
 
 
 class PSOD:
@@ -19,8 +24,12 @@ class PSOD:
     :param max_cols_chosen: Float specifying the maximum percentage of columns to be used for each regressor.
     :param stdevs_to_outlier: Float specifying after how many standard deviations the mean prediction error will be
                               flagged as an outlier.
-    :param log_transform: Boolean to set if the numerical data will be log-transformed.
+    :param sample_frac: Float specifying how much percent of rows each bagging sample shall use.
+    :param transform_algorithm: String choosing how numerical columns shall be transformed. Must be any of
+                                ["logarithmic", "yeo-johnson", "none", None].
     :param random_seed: Int specifying the start random_seed. Each additional iteration will use a different seed.
+    :param cat_encode_on_sample: If True categorical encoding will be applied to bagging sample. If False fits the
+                                 encoder on the full dataset. Encoding on sample might reduce accuracy.
     :param flag_outlier_on: String indicating if outliers shall we errors that are on the top end, bottom end or
                             both ends of the mean error distribution. Must be any of ["low end", "both ends", "high end"]
     """
@@ -31,23 +40,28 @@ class PSOD:
             min_cols_chosen: float = 0.5,
             max_cols_chosen: float = 1.0,
             stdevs_to_outlier: float = 1.96,
-            log_transform: bool = True,
+            sample_frac: float = 1.0,
+            transform_algorithm: Union[Literal["logarithmic", "yeo-johnson", "none"], None] = "logarithmic",
             random_seed: int = 1,
+            cat_encode_on_sample: bool = False,
             flag_outlier_on: Literal["low end", "both ends", "high end"] = "both ends"
     ):
         self.cat_columns = cat_columns
         self.cat_encoders: Dict[Union[str, int, float], TargetEncoder] = {}
+        self.numeric_encoders: Union[PowerTransformer, None] = None
         self.regressors: Dict[Union[str, int, float], LinearRegression] = {}
         self.n_jobs = n_jobs
         self.scores: Union[pd.Series, None] = None
         self.outlier_classes = Union[pd.Series, None]
         self.min_cols_chosen: Union[int, float] = min_cols_chosen
         self.max_cols_chosen: Union[int, float] = max_cols_chosen
-        self.chosen_columns: List[list] = []
+        self.chosen_columns: Dict[Union[str, int, float]] = {}
         self.stdevs_to_outlier = stdevs_to_outlier
-        self.log_transform = log_transform
+        self.sample_frac = sample_frac
+        self.transform_algorithm = transform_algorithm
         self.flag_outlier_on = flag_outlier_on
         self.random_seed = random_seed
+        self.cat_encode_on_sample = cat_encode_on_sample
         self.random_generator = np.random.default_rng(self.random_seed)
 
         if self.max_cols_chosen > 1.0:
@@ -62,6 +76,17 @@ class PSOD:
         if self.flag_outlier_on not in ["low end", "both ends", "high end"]:
             raise ValueError('Param flag_outlier_on must be any of ["low end", "both ends", "high end"].')
 
+        if self.sample_frac > 1.0:
+            warning_message = """Param sample_frac has been set to higher than 1.0. This might lead to overfitting. It
+             is recommended to leave this param at 1."""
+            warnings.warn(warning_message, UserWarning)
+
+        if self.min_cols_chosen < 0.3:
+            warning_message = """Param min_cols_chosen has been set to a very low value of less than 0.3.
+            Depending on the dataset this may reduce performance. The more columns the data has the safer it is
+            to reduce this param."""
+            warnings.warn(warning_message, UserWarning)
+
     def __str__(self):
         message = f"""
         Most important params specified are:
@@ -70,8 +95,10 @@ class PSOD:
         - min_cols_chosen: {self.min_cols_chosen}
         - max_cols_chosen: {self.max_cols_chosen}
         - stdevs_to_outlier: {self.stdevs_to_outlier}
-        - log_transform: {self.log_transform}
+        - sample_frac: {self.sample_frac}
+        - transform_algorithm: {self.transform_algorithm}
         - random_seed: {self.random_seed}
+        - cat_encode_on_sample: {self.cat_encode_on_sample}
         - flag_outlier_on: {self.flag_outlier_on}
         """
         return message
@@ -97,8 +124,7 @@ class PSOD:
         return self.random_generator.choice(df.columns, nb_cols, replace=False).tolist()
 
     def col_intersection(self, lst1, lst2) -> list:
-        chosen_cat_cols = [value for value in lst1 if value in lst2]
-        return chosen_cat_cols
+        return np.intersect1d(lst1, lst2).tolist()
 
     def make_outlier_classes(self, df_scores: pd.DataFrame):
         mean_score = df_scores["anomaly"].mean()
@@ -134,47 +160,91 @@ class PSOD:
         self.scores = df_scores["anomaly"]
         return df_scores
 
+    def fit_transform_numeric_data(self, df):
+        if self.transform_algorithm == "logarithmic" and isinstance(self.cat_columns, list):
+            df = np.log1p(df)
+        elif self.transform_algorithm == "yeo-johnson" and isinstance(self.cat_columns, list):
+            scaler = PowerTransformer(method="yeo-johnson")
+            df = pd.DataFrame(
+                scaler.fit_transform(df),
+                columns=df.drop(self.cat_columns, axis=1).columns
+            )
+            self.numeric_encoders = scaler
+        else:
+            return df
+        return df
+
+    def transform_numeric_data(self, df):
+        if self.transform_algorithm == "logarithmic" and isinstance(self.cat_columns, list):
+            df = np.log1p(df)
+        elif self.transform_algorithm == "yeo-johnson" and isinstance(self.cat_columns, list):
+            scaler = self.numeric_encoders
+            df = pd.DataFrame(
+                scaler.transform(df),
+                columns=df.drop(self.cat_columns, axis=1).columns
+            )
+        else:
+            return df
+        return df
+
     def fit_predict(self, df, return_class=False) -> pd.Series:
         df_scores = df.copy()
         self.get_range_cols(df)
         if isinstance(self.cat_columns, list):
             loop_cols = df.drop(self.cat_columns, axis=1).columns
-        else:
-            loop_cols = df.columns
-
-        if self.log_transform and isinstance(self.cat_columns, list):
-            df.drop(self.cat_columns, axis=1).loc[:, :] = np.log1p(
+            df.drop(self.cat_columns, axis=1).loc[:, :] = self.fit_transform_numeric_data(
                 df.drop(self.cat_columns, axis=1).loc[:, :]
             )
+        else:
+            loop_cols = df.columns
+            df.loc[:, :] = self.fit_transform_numeric_data(df.loc[:, :])
+
+
 
         for enum, col in tqdm(enumerate(loop_cols), total=len(loop_cols)):
-            self.chosen_columns.append(self.chose_random_columns(df.drop(col, axis=1)))
+            self.chosen_columns[col] = self.chose_random_columns(df.drop(col, axis=1))
             temp_df = df.copy()
             # encode categorical columns that are in chosen columns
             if isinstance(self.cat_columns, list):
                 chosen_cat_cols = self.col_intersection(
-                    self.cat_columns, self.chosen_columns[enum]
+                    self.cat_columns, self.chosen_columns[col]
                 )
 
-            idx = df_scores.sample(frac=1.0, random_state=enum, replace=True).index
+            idx = df_scores.sample(frac=self.sample_frac, random_state=enum, replace=True).index
 
             if isinstance(self.cat_columns, list):
                 enc = TargetEncoder(cols=chosen_cat_cols)
-                temp_df.loc[:, chosen_cat_cols] = enc.fit_transform(
-                    df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
-                    df.loc[:, col].iloc[idx].reset_index(drop=True),
+                if self.cat_encode_on_sample:
+                    enc.fit(
+                        df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
+                        df.loc[:, col].iloc[idx].reset_index(drop=True),
+                    )
+                else:
+                    enc.fit(
+                        df.loc[:, chosen_cat_cols].reset_index(drop=True),
+                        df.loc[:, col].reset_index(drop=True),
+                    )
+
+                temp_df.loc[:, chosen_cat_cols] = enc.transform(
+                    df.loc[:, chosen_cat_cols],
+                    df.loc[:, col],
                 )
 
             reg = LinearRegression(n_jobs=self.n_jobs).fit(
-                temp_df.loc[:, self.chosen_columns[enum]].iloc[idx],
-                temp_df[col].iloc[idx],
+                temp_df.loc[:, self.chosen_columns[col]].iloc[idx].reset_index(drop=True),
+                temp_df[col].iloc[idx].reset_index(drop=True),
             )
-            df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[enum]])
-            df_scores[col] = abs(temp_df[col] - df_scores[col])
+            df_scores[col] = reg.predict(temp_df.loc[:, self.chosen_columns[col]])
+            df_scores[col] = abs(temp_df[col].values - df_scores[col].values)
+
             self.regressors[col] = reg
             if isinstance(self.cat_columns, list):
                 self.cat_encoders[col] = enc
+                del enc
+
             del temp_df
+            del idx
+            del reg
             _ = gc.collect()
 
         df_scores = self.drop_cat_columns(df_scores)
@@ -187,20 +257,19 @@ class PSOD:
     def predict(self, df, return_class=False) -> pd.Series:
         df_scores = df.copy()
 
-        if self.log_transform:
-            df_scores.drop(self.cat_columns, axis=1).loc[:, :] = np.log1p(
-                df_scores.drop(self.cat_columns, axis=1).loc[:, :]
-            )
-
         if isinstance(self.cat_columns, list) and isinstance(self.cat_columns, list):
             loop_cols = df.drop(self.cat_columns, axis=1).columns
+            df.drop(self.cat_columns, axis=1).loc[:, :] = self.transform_numeric_data(
+                df.drop(self.cat_columns, axis=1).loc[:, :]
+            )
         else:
             loop_cols = df.columns
+            df = self.transform_numeric_data(df.loc[:, :])
 
         for enum, col in tqdm(enumerate(loop_cols)):
             temp_df = df
             chosen_cat_cols = self.col_intersection(
-                self.cat_columns, self.chosen_columns[enum]
+                self.cat_columns, self.chosen_columns[col]
             )
             if isinstance(self.cat_columns, list):
                 enc = self.cat_encoders[col]
@@ -208,7 +277,7 @@ class PSOD:
 
             reg = self.regressors[col]
 
-            df_scores[col] = reg.predict(df[self.chosen_columns[enum]])
+            df_scores[col] = reg.predict(df[self.chosen_columns[col]])
             df_scores[col] = abs(df[col] - df_scores[col])
             self.regressors[col] = reg
 
