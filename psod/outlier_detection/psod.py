@@ -9,6 +9,7 @@ import pandas as pd
 from category_encoders import TargetEncoder
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
+import warnings
 
 
 class PSOD:
@@ -25,6 +26,8 @@ class PSOD:
     :param sample_frac: Float specifying how much percent of rows each bagging sample shall use.
     :param log_transform: Boolean to set if the numerical data will be log-transformed.
     :param random_seed: Int specifying the start random_seed. Each additional iteration will use a different seed.
+    :param cat_encode_on_sample: If True categorical encoding will be applied to bagging sample. If False fits the
+                                 encoder on the full dataset. Encoding on sample might reduce accuracy.
     :param flag_outlier_on: String indicating if outliers shall we errors that are on the top end, bottom end or
                             both ends of the mean error distribution. Must be any of ["low end", "both ends", "high end"]
     """
@@ -38,6 +41,7 @@ class PSOD:
             sample_frac: float = 1.0,
             log_transform: bool = True,
             random_seed: int = 1,
+            cat_encode_on_sample: bool = False,
             flag_outlier_on: Literal["low end", "both ends", "high end"] = "both ends"
     ):
         self.cat_columns = cat_columns
@@ -54,6 +58,7 @@ class PSOD:
         self.log_transform = log_transform
         self.flag_outlier_on = flag_outlier_on
         self.random_seed = random_seed
+        self.cat_encode_on_sample = cat_encode_on_sample
         self.random_generator = np.random.default_rng(self.random_seed)
 
         if self.max_cols_chosen > 1.0:
@@ -68,6 +73,17 @@ class PSOD:
         if self.flag_outlier_on not in ["low end", "both ends", "high end"]:
             raise ValueError('Param flag_outlier_on must be any of ["low end", "both ends", "high end"].')
 
+        if self.sample_frac > 1.0:
+            warning_message = """Param sample_frac has been set to higher than 1.0. This might lead to overfitting. It
+             is recommended to leave this param at 1."""
+            warnings.warn(warning_message, UserWarning)
+
+        if self.min_cols_chosen < 0.3:
+            warning_message = """Param min_cols_chosen has been set to a very low value of less than 0.3.
+            Depending on the dataset this may reduce performance. The more columns the data has the safer it is
+            to reduce this param."""
+            warnings.warn(warning_message, UserWarning)
+
     def __str__(self):
         message = f"""
         Most important params specified are:
@@ -79,6 +95,7 @@ class PSOD:
         - sample_frac: {self.sample_frac}
         - log_transform: {self.log_transform}
         - random_seed: {self.random_seed}
+        - cat_encode_on_sample: {self.cat_encode_on_sample}
         - flag_outlier_on: {self.flag_outlier_on}
         """
         return message
@@ -166,14 +183,20 @@ class PSOD:
 
             if isinstance(self.cat_columns, list):
                 enc = TargetEncoder(cols=chosen_cat_cols)
-                enc.fit(
-                    df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
-                    df.loc[:, col].iloc[idx].reset_index(drop=True),
-                )
+                if self.cat_encode_on_sample:
+                    enc.fit(
+                        df.loc[:, chosen_cat_cols].iloc[idx].reset_index(drop=True),
+                        df.loc[:, col].iloc[idx].reset_index(drop=True),
+                    )
+                else:
+                    enc.fit(
+                        df.loc[:, chosen_cat_cols].reset_index(drop=True),
+                        df.loc[:, col].reset_index(drop=True),
+                    )
 
                 temp_df.loc[:, chosen_cat_cols] = enc.transform(
-                    df.loc[:, chosen_cat_cols].reset_index(drop=True),
-                    df.loc[:, col].reset_index(drop=True),
+                    df.loc[:, chosen_cat_cols],
+                    df.loc[:, col],
                 )
 
             reg = LinearRegression(n_jobs=self.n_jobs).fit(
