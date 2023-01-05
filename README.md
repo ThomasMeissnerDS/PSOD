@@ -65,6 +65,8 @@ The file psod.py is always the most updated one.
 
 ## Release History
 
+* 1.1.0
+    * Add correlation based feature selection
 * 1.0.0
     * Some bug fixes
     * Added yeo-johnson to numerical transformation options and changed the parameter name and type
