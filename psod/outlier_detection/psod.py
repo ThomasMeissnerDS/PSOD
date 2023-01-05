@@ -25,6 +25,10 @@ class PSOD:
     :param stdevs_to_outlier: Float specifying after how many standard deviations the mean prediction error will be
                               flagged as an outlier.
     :param sample_frac: Float specifying how much percent of rows each bagging sample shall use.
+    :param correlation_threshold: For inbuilt feature selection PSOD will filter out all columns with a correlation
+                                 that is closer to 0 than the correlation_threshold. This usually speeds up training
+                                 and increases accuracy of top outliers. Iy may reduce global performance slightly.
+                                 Set this value to 0 to not filter any features.
     :param transform_algorithm: String choosing how numerical columns shall be transformed. Must be any of
                                 ["logarithmic", "yeo-johnson", "none", None].
     :param random_seed: Int specifying the start random_seed. Each additional iteration will use a different seed.
@@ -41,6 +45,7 @@ class PSOD:
             max_cols_chosen: float = 1.0,
             stdevs_to_outlier: float = 1.96,
             sample_frac: float = 1.0,
+            correlation_threshold: float = 0.05,
             transform_algorithm: Union[Literal["logarithmic", "yeo-johnson", "none"], None] = "logarithmic",
             random_seed: int = 1,
             cat_encode_on_sample: bool = False,
@@ -58,6 +63,7 @@ class PSOD:
         self.chosen_columns: Dict[Union[str, int, float]] = {}
         self.stdevs_to_outlier = stdevs_to_outlier
         self.sample_frac = sample_frac
+        self.correlation_threshold = correlation_threshold
         self.transform_algorithm = transform_algorithm
         self.flag_outlier_on = flag_outlier_on
         self.random_seed = random_seed
@@ -69,6 +75,9 @@ class PSOD:
 
         if self.min_cols_chosen <= 0:
             raise ValueError("Param min_cols_chosen must be higher than 0.")
+
+        if self.correlation_threshold >= 1.0 or self.correlation_threshold < 0:
+            raise ValueError("Param correlation_threshold must be between >= 0 and < 1.")
 
         if self.min_cols_chosen > self.max_cols_chosen:
             raise ValueError("Param min_cols_chosen cannot be higher than param max_cols_chosen.")
@@ -87,6 +96,11 @@ class PSOD:
             to reduce this param."""
             warnings.warn(warning_message, UserWarning)
 
+        if self.correlation_threshold > 0.15:
+            warning_message = """Param correlation_threshold has been set higher than 0.15. This may harm performance or
+            lead to no feature selection effectively. It is recommended to not set the value above 0.05."""
+            warnings.warn(warning_message, UserWarning)
+
     def __str__(self):
         message = f"""
         Most important params specified are:
@@ -96,6 +110,7 @@ class PSOD:
         - max_cols_chosen: {self.max_cols_chosen}
         - stdevs_to_outlier: {self.stdevs_to_outlier}
         - sample_frac: {self.sample_frac}
+        - self.correlation_threshold: {self.correlation_threshold}
         - transform_algorithm: {self.transform_algorithm}
         - random_seed: {self.random_seed}
         - cat_encode_on_sample: {self.cat_encode_on_sample}
@@ -122,6 +137,14 @@ class PSOD:
                 np.arange(self.min_cols_chosen, self.max_cols_chosen) + 1, 1, replace=False
             )
         return self.random_generator.choice(df.columns, nb_cols, replace=False).tolist()
+
+    def correlation_feature_selection(self, df, target_col):
+        cols = []
+        for col in df.columns:
+            corr = df[col].corr(df[target_col])
+            if corr > self.correlation_threshold or corr < -self.correlation_threshold and col != target_col:
+                cols.append(col)
+        return cols
 
     def col_intersection(self, lst1, lst2) -> list:
         return np.intersect1d(lst1, lst2).tolist()
@@ -209,6 +232,20 @@ class PSOD:
                 chosen_cat_cols = self.col_intersection(
                     self.cat_columns, self.chosen_columns[col]
                 )
+
+            if isinstance(self.cat_columns, list):
+                corr_cols = self.correlation_feature_selection(temp_df.drop(self.cat_columns, axis=1), col)
+                corr_cols = self.col_intersection(
+                    corr_cols, self.chosen_columns[col]
+                )
+            else:
+                corr_cols = self.correlation_feature_selection(temp_df, col)
+                corr_cols = self.col_intersection(
+                    corr_cols, self.chosen_columns[col]
+                )
+
+            if len(corr_cols) > 0:
+                self.chosen_columns[col] = corr_cols
 
             idx = df_scores.sample(frac=self.sample_frac, random_state=enum, replace=True).index
 
