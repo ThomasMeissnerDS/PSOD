@@ -232,6 +232,8 @@ class PSOD:
                 chosen_cat_cols = self.col_intersection(
                     self.cat_columns, self.chosen_columns[col]
                 )
+            else:
+                chosen_cat_cols = self.chosen_columns[col]
 
             if isinstance(self.cat_columns, list):
                 corr_cols = self.correlation_feature_selection(temp_df.drop(self.cat_columns, axis=1), col)
@@ -305,9 +307,13 @@ class PSOD:
 
         for enum, col in tqdm(enumerate(loop_cols)):
             temp_df = df
-            chosen_cat_cols = self.col_intersection(
-                self.cat_columns, self.chosen_columns[col]
-            )
+            if isinstance(self.cat_columns, list):
+                chosen_cat_cols = self.col_intersection(
+                    self.cat_columns, self.chosen_columns[col]
+                )
+            else:
+                chosen_cat_cols = self.chosen_columns[col]
+
             if isinstance(self.cat_columns, list):
                 enc = self.cat_encoders[col]
                 temp_df[chosen_cat_cols] = enc.transform(df[chosen_cat_cols])
