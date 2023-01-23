@@ -41,15 +41,18 @@ full_res = iso_class.fit_predict(scaled, return_class=True)
 
 6.) Predict on new data:
 ```sh
-full_res = iso_class.predict(scaled, return_class=True)
+full_res = iso_class.predict(scaled, return_class=True, use_trained_stats=True)
 ```
+The param use_trained_stats is a boolean indicating of conversion from outlier scores to outlier class
+shall make use of mean and std of prediction errors obtained during training shall be used. 
+If False prediction errors of the provided dataset will be treated as new distribution 
+with new mean and std as classification thresholds.
 
 Classes and outlier scores can always be accessed from the class instance via:
 ```sh
 iso_class.scores  # getting the outlier scores
 iso_class.outlier_classes  # get the classes
 ```
-
 Many parameters can be optimized. Detailed descriptions on parameters can be found using:
 ```sh
 help(iso_class)
@@ -65,6 +68,10 @@ The file psod.py is always the most updated one.
 
 ## Release History
 
+* 1.2.0
+    * Added use_trained_stats to predict function
+    * Added doc strings to main functions
+    * Fixed a bug where PSOD tried to drop categorical data in the absence of categorical data
 * 1.1.0
     * Add correlation based feature selection
 * 1.0.0
