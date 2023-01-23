@@ -19,7 +19,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.7,<=3.10"
-category_encoders = ">= 2.3.0" # changed to also include newer versions
+category_encoders = ">= 2.3.0" # changed to also include newer version
 numpy = "^1.19.4"
 pandas = "^1.1.5"
 scikit-learn = "^1.0.1"
