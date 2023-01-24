@@ -71,7 +71,7 @@ The file psod.py is always the most updated one.
 * 1.2.0
     * Added use_trained_stats to predict function
     * Added doc strings to main functions
-    * Fixed a bug where PSOD tried to drop categorical data in the absence of categorical data
+    * Fixed a bug where PSOD tried to drop categorical data in the absence of categorical data.
 * 1.1.0
     * Add correlation based feature selection
 * 1.0.0
