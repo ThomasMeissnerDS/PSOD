@@ -61,6 +61,7 @@ class PSOD:
         self.min_cols_chosen: Union[int, float] = min_cols_chosen
         self.max_cols_chosen: Union[int, float] = max_cols_chosen
         self.chosen_columns: Dict[Union[str, int, float]] = {}
+        self.cols_with_var: List[Union[str, int, float]] = []
         self.stdevs_to_outlier = stdevs_to_outlier
         self.sample_frac = sample_frac
         self.correlation_threshold = correlation_threshold
@@ -69,6 +70,7 @@ class PSOD:
         self.random_seed = random_seed
         self.cat_encode_on_sample = cat_encode_on_sample
         self.random_generator = np.random.default_rng(self.random_seed)
+        self.pred_distribution_stats: Dict[str, float] = {}
 
         if self.max_cols_chosen > 1.0:
             raise ValueError("Param max_cols_chosen cannot be higher than 1.")
@@ -149,22 +151,25 @@ class PSOD:
     def col_intersection(self, lst1, lst2) -> list:
         return np.intersect1d(lst1, lst2).tolist()
 
-    def make_outlier_classes(self, df_scores: pd.DataFrame):
-        mean_score = df_scores["anomaly"].mean()
-        std_score = df_scores["anomaly"].std()
+    def make_outlier_classes(self, df_scores: pd.DataFrame, use_trained_stats=True):
+        if not use_trained_stats:
+            mean_score = df_scores["anomaly"].mean()
+            std_score = df_scores["anomaly"].std()
+            self.pred_distribution_stats["mean_score"] = mean_score
+            self.pred_distribution_stats["std_score"] = std_score
 
         if self.flag_outlier_on == "both ends":
             conditions = [
-                df_scores["anomaly"] < mean_score - self.stdevs_to_outlier * std_score,
-                df_scores["anomaly"] > mean_score + self.stdevs_to_outlier * std_score
+                df_scores["anomaly"] < self.pred_distribution_stats["mean_score"] - self.stdevs_to_outlier * self.pred_distribution_stats["std_score"],
+                df_scores["anomaly"] > self.pred_distribution_stats["mean_score"] + self.stdevs_to_outlier * self.pred_distribution_stats["std_score"]
             ]
         elif self.flag_outlier_on == "low end":
             conditions = [
-                df_scores["anomaly"] < mean_score - self.stdevs_to_outlier * std_score
+                df_scores["anomaly"] < self.pred_distribution_stats["mean_score"] - self.stdevs_to_outlier * self.pred_distribution_stats["std_score"]
             ]
         elif self.flag_outlier_on == "high end":
             conditions = [
-                df_scores["anomaly"] > mean_score + self.stdevs_to_outlier * std_score
+                df_scores["anomaly"] > self.pred_distribution_stats["mean_score"] + self.stdevs_to_outlier * self.pred_distribution_stats["std_score"]
             ]
         else:
             raise ValueError('Param flag_outlier_on must be any of ["low end", "both ends", "high end"].')
@@ -172,6 +177,7 @@ class PSOD:
         choices = [1 for i in conditions]
         df_scores["anomaly_class"] = np.select(conditions, choices, default=0)
         self.outlier_classes = df_scores["anomaly_class"]
+
         return df_scores["anomaly_class"]
 
     def drop_cat_columns(self, df_scores: pd.DataFrame) -> pd.DataFrame:
@@ -210,7 +216,25 @@ class PSOD:
             return df
         return df
 
+    def remove_zero_variance(self, df) -> list:
+        var_data: pd.Series = df.var()
+        return var_data.loc[var_data != 0].index.to_list()
+
     def fit_predict(self, df, return_class=False) -> pd.Series:
+        """
+        Train PSOD and return outlier predictions.
+
+        :param df: Pandas DataFrame to detect outliers from.
+        :param return_class: Boolean indicating if class or outlier scores shall be returned. Default is False.
+        :return: Returns a Pandas Series
+        """
+        if isinstance(self.cat_columns, list):
+            self.cols_with_var = self.remove_zero_variance(df.drop(self.cat_columns, axis=1))
+            df = df.loc[:, self.cols_with_var+self.cat_columns]
+        else:
+            self.cols_with_var = self.remove_zero_variance(df)
+            df = df.loc[:, self.cols_with_var]
+
         df_scores = df.copy()
         self.get_range_cols(df)
         if isinstance(self.cat_columns, list):
@@ -221,8 +245,6 @@ class PSOD:
         else:
             loop_cols = df.columns
             df.loc[:, :] = self.fit_transform_numeric_data(df.loc[:, :])
-
-
 
         for enum, col in tqdm(enumerate(loop_cols), total=len(loop_cols)):
             self.chosen_columns[col] = self.chose_random_columns(df.drop(col, axis=1))
@@ -289,14 +311,28 @@ class PSOD:
         df_scores = self.drop_cat_columns(df_scores)
 
         if return_class:
-            return self.make_outlier_classes(df_scores)
+            return self.make_outlier_classes(df_scores, use_trained_stats=False)
         else:
             return df_scores["anomaly"]
 
-    def predict(self, df, return_class=False) -> pd.Series:
+    def predict(self, df, return_class=False, use_trained_stats=True) -> pd.Series:
+        """
+        Use trained PSOD instance to predict outliers on new data.
+
+        :param df: Pandas DataFrame to predict outliers from.
+        :param return_class: Boolean indicating if class or outlier scores shall be returned. Default is False.
+        :param use_trained_stats: Boolean indicating of conversion from outlier scores to outlier class shall make use
+        of mean and std of prediction errors obtained during training shall be used. If False prediction errors
+        of the provided dataset will be treated as new distribution with new mean and std as classification thresholds.
+        :return: Returns a Pandas Series
+        """
+        if isinstance(self.cat_columns, list):
+            df = df.loc[:, self.cols_with_var+self.cat_columns]
+        else:
+            df = df.loc[:, self.cols_with_var]
         df_scores = df.copy()
 
-        if isinstance(self.cat_columns, list) and isinstance(self.cat_columns, list):
+        if isinstance(self.cat_columns, list):
             loop_cols = df.drop(self.cat_columns, axis=1).columns
             df.drop(self.cat_columns, axis=1).loc[:, :] = self.transform_numeric_data(
                 df.drop(self.cat_columns, axis=1).loc[:, :]
@@ -327,6 +363,6 @@ class PSOD:
         df_scores = self.drop_cat_columns(df_scores)
 
         if return_class:
-            return self.make_outlier_classes(df_scores)
+            return self.make_outlier_classes(df_scores, use_trained_stats=use_trained_stats)
         else:
             return df_scores["anomaly"]
