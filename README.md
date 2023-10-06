@@ -69,7 +69,7 @@ The file psod.py is always the most updated one.
 ## Release History
 
 * 1.3.0
-    * Widen dependencies
+    * Widen dependencies for all libraries to support higher versions
 * 1.2.1
     * Make typing import compatible to Python 3.7
 * 1.2.0
